@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.InputStream
 import java.math.BigDecimal
+import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import com.univocity.parsers.csv.CsvParser
-
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -102,7 +102,8 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options, f.metadata))
+      .toArray
   }
 
   /**
@@ -116,7 +117,8 @@ class UnivocityParser(
       name: String,
       dataType: DataType,
       nullable: Boolean = true,
-      options: CSVOptions): ValueConverter = dataType match {
+      options: CSVOptions,
+      metadata: Metadata): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.toByte)
 
@@ -156,9 +158,15 @@ class UnivocityParser(
 
     case _: TimestampType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
+        val timestampFormat = if (metadata.contains("timestampFormat")) {
+          FastDateFormat.getInstance(metadata.getString("timestampFormat"), Locale.US)
+        } else {
+          options.timestampFormat
+        }
+
         // This one will lose microseconds parts.
         // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
+        Try(timestampFormat.parse(datum).getTime * 1000L)
           .getOrElse {
           // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
           // compatibility.
@@ -168,9 +176,15 @@ class UnivocityParser(
 
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
+        val dateFormat = if (metadata.contains("dateFormat")) {
+          FastDateFormat.getInstance(metadata.getString("dateFormat"), Locale.US)
+        } else {
+          options.dateFormat
+        }
+
         // This one will lose microseconds parts.
         // See https://issues.apache.org/jira/browse/SPARK-10681.x
-        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
+        Try(DateTimeUtils.millisToDays(dateFormat.parse(datum).getTime))
           .getOrElse {
           // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
           // compatibility.
@@ -182,7 +196,7 @@ class UnivocityParser(
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
     case udt: UserDefinedType[_] => (datum: String) =>
-      makeConverter(name, udt.sqlType, nullable, options)
+      makeConverter(name, udt.sqlType, nullable, options, metadata)
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")

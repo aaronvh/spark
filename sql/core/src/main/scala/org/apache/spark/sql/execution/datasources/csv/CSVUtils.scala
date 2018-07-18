@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.util.Locale
+
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._

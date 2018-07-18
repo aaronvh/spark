@@ -30,6 +30,8 @@ class UnivocityParserSuite extends SparkFunSuite {
     StructType(Seq.empty),
     new CSVOptions(Map.empty[String, String], false, "GMT"))
 
+  private val metadata = Metadata.empty
+
   private def assertNull(v: Any) = assert(v == null)
 
   test("Can parse decimal type values") {
@@ -40,8 +42,9 @@ class UnivocityParserSuite extends SparkFunSuite {
     stringValues.zip(decimalValues).foreach { case (strVal, decimalVal) =>
       val decimalValue = new BigDecimal(decimalVal.toString)
       val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-      assert(parser.makeConverter("_1", decimalType, options = options).apply(strVal) ===
-        Decimal(decimalValue, decimalType.precision, decimalType.scale))
+      assert(parser.makeConverter(
+        "_1", decimalType, options = options, metadata = metadata
+      ).apply(strVal) === Decimal(decimalValue, decimalType.precision, decimalType.scale))
     }
   }
 
@@ -54,13 +57,17 @@ class UnivocityParserSuite extends SparkFunSuite {
       // Tests that a custom nullValue.
       val nullValueOptions = new CSVOptions(Map("nullValue" -> "-"), false, "GMT")
       val converter =
-        parser.makeConverter("_1", t, nullable = true, options = nullValueOptions)
+        parser.makeConverter(
+          "_1", t, nullable = true, options = nullValueOptions, metadata = metadata
+        )
       assertNull(converter.apply("-"))
       assertNull(converter.apply(null))
 
       // Tests that the default nullValue is empty string.
       val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-      assertNull(parser.makeConverter("_1", t, nullable = true, options = options).apply(""))
+      assertNull(parser.makeConverter(
+        "_1", t, nullable = true, options = options, metadata = metadata
+      ).apply(""))
     }
 
     // Not nullable field with nullValue option.
@@ -68,7 +75,7 @@ class UnivocityParserSuite extends SparkFunSuite {
       // Casts a null to not nullable field should throw an exception.
       val options = new CSVOptions(Map("nullValue" -> "-"), false, "GMT")
       val converter =
-        parser.makeConverter("_1", t, nullable = false, options = options)
+        parser.makeConverter("_1", t, nullable = false, options = options, metadata = metadata)
       var message = intercept[RuntimeException] {
         converter.apply("-")
       }.getMessage
@@ -84,7 +91,7 @@ class UnivocityParserSuite extends SparkFunSuite {
     Seq(true, false).foreach { b =>
       val options = new CSVOptions(Map("nullValue" -> "null"), false, "GMT")
       val converter =
-        parser.makeConverter("_1", StringType, nullable = b, options = options)
+        parser.makeConverter("_1", StringType, nullable = b, options = options, metadata = metadata)
       assert(converter.apply("") == UTF8String.fromString(""))
     }
   }
@@ -92,43 +99,92 @@ class UnivocityParserSuite extends SparkFunSuite {
   test("Throws exception for empty string with non null type") {
       val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     val exception = intercept[RuntimeException]{
-      parser.makeConverter("_1", IntegerType, nullable = false, options = options).apply("")
+      parser.makeConverter(
+        "_1", IntegerType, nullable = false, options = options, metadata = metadata
+      ).apply("")
     }
     assert(exception.getMessage.contains("null value found but field _1 is not nullable."))
   }
 
   test("Types are cast correctly") {
     val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-    assert(parser.makeConverter("_1", ByteType, options = options).apply("10") == 10)
-    assert(parser.makeConverter("_1", ShortType, options = options).apply("10") == 10)
-    assert(parser.makeConverter("_1", IntegerType, options = options).apply("10") == 10)
-    assert(parser.makeConverter("_1", LongType, options = options).apply("10") == 10)
-    assert(parser.makeConverter("_1", FloatType, options = options).apply("1.00") == 1.0)
-    assert(parser.makeConverter("_1", DoubleType, options = options).apply("1.00") == 1.0)
-    assert(parser.makeConverter("_1", BooleanType, options = options).apply("true") == true)
+    assert(parser.makeConverter(
+      "_1", ByteType, options = options, metadata = metadata
+    ).apply("10") == 10)
+    assert(parser.makeConverter(
+      "_1", ShortType, options = options, metadata = metadata
+    ).apply("10") == 10)
+    assert(parser.makeConverter(
+      "_1", IntegerType, options = options, metadata = metadata
+    ).apply("10") == 10)
+    assert(parser.makeConverter(
+      "_1", LongType, options = options, metadata = metadata
+    ).apply("10") == 10)
+    assert(parser.makeConverter(
+      "_1", FloatType, options = options, metadata = metadata
+    ).apply("1.00") == 1.0)
+    assert(parser.makeConverter(
+      "_1", DoubleType, options = options, metadata = metadata
+    ).apply("1.00") == 1.0)
+    assert(parser.makeConverter(
+      "_1", BooleanType, options = options, metadata = metadata
+    ).apply("true") == true)
 
     val timestampsOptions =
       new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
     val customTimestamp = "31/01/2015 00:00"
     val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
     val castedTimestamp =
-      parser.makeConverter("_1", TimestampType, nullable = true, options = timestampsOptions)
-        .apply(customTimestamp)
+      parser.makeConverter(
+        "_1", TimestampType, nullable = true, options = timestampsOptions, metadata = metadata
+      ).apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
     val customDate = "31/01/2015"
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
     val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
     val castedDate =
-      parser.makeConverter("_1", DateType, nullable = true, options = dateOptions)
-        .apply(customTimestamp)
+      parser.makeConverter(
+        "_1", DateType, nullable = true, options = dateOptions, metadata = metadata
+      ).apply(customTimestamp)
     assert(castedDate == DateTimeUtils.millisToDays(expectedDate))
 
     val timestamp = "2015-01-01 00:00:00"
-    assert(parser.makeConverter("_1", TimestampType, options = options).apply(timestamp) ==
+    assert(parser.makeConverter(
+      "_1", TimestampType, options = options, metadata = metadata
+    ).apply(timestamp) ==
       DateTimeUtils.stringToTime(timestamp).getTime  * 1000L)
-    assert(parser.makeConverter("_1", DateType, options = options).apply("2015-01-01") ==
+    assert(parser.makeConverter(
+      "_1", DateType, options = options, metadata = metadata
+    ).apply("2015-01-01") ==
       DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
+  }
+
+  test("Date and Timestamp types are cast correctly with metadata") {
+    val metadataBuilder = new MetadataBuilder()
+
+    val timestampsOptions =
+      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
+    val customTimestamp = "2015/01/31 00:00"
+    val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
+    val customTimestampMetadata = metadataBuilder
+      .putString("dateFormat", "yyyy/MM/dd hh:mm").build()
+    val castedTimestamp =
+      parser.makeConverter(
+        "_1", TimestampType, nullable = true,
+        options = timestampsOptions, metadata = customTimestampMetadata
+      ).apply(customTimestamp)
+    assert(castedTimestamp == expectedTime * 1000L)
+
+    val customDate = "2015/01/31"
+    val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
+    val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
+    val customDateMetadata = metadataBuilder.putString("dateFormat", "yyyy/MM/dd").build()
+    val castedDate =
+      parser.makeConverter(
+        "_1", DateType, nullable = true, options = dateOptions, metadata = customDateMetadata
+      ).apply(customTimestamp)
+    assert(castedDate == DateTimeUtils.millisToDays(expectedDate))
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
@@ -138,7 +194,7 @@ class UnivocityParserSuite extends SparkFunSuite {
     types.foreach { dt =>
       input.foreach { v =>
         val message = intercept[NumberFormatException] {
-          parser.makeConverter("_1", dt, options = options).apply(v)
+          parser.makeConverter("_1", dt, options = options, metadata = metadata).apply(v)
         }.getMessage
         assert(message.contains(v))
       }
@@ -148,7 +204,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   test("Float NaN values are parsed correctly") {
     val options = new CSVOptions(Map("nanValue" -> "nn"), false, "GMT")
     val floatVal: Float = parser.makeConverter(
-      "_1", FloatType, nullable = true, options = options
+      "_1", FloatType, nullable = true, options = options, metadata = metadata
     ).apply("nn").asInstanceOf[Float]
 
     // Java implements the IEEE-754 floating point standard which guarantees that any comparison
@@ -159,7 +215,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   test("Double NaN values are parsed correctly") {
     val options = new CSVOptions(Map("nanValue" -> "-"), false, "GMT")
     val doubleVal: Double = parser.makeConverter(
-      "_1", DoubleType, nullable = true, options = options
+      "_1", DoubleType, nullable = true, options = options, metadata = metadata
     ).apply("-").asInstanceOf[Double]
 
     assert(doubleVal.isNaN)
@@ -168,14 +224,14 @@ class UnivocityParserSuite extends SparkFunSuite {
   test("Float infinite values can be parsed") {
     val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "GMT")
     val floatVal1 = parser.makeConverter(
-      "_1", FloatType, nullable = true, options = negativeInfOptions
+      "_1", FloatType, nullable = true, options = negativeInfOptions, metadata = metadata
     ).apply("max").asInstanceOf[Float]
 
     assert(floatVal1 == Float.NegativeInfinity)
 
     val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "GMT")
     val floatVal2 = parser.makeConverter(
-      "_1", FloatType, nullable = true, options = positiveInfOptions
+      "_1", FloatType, nullable = true, options = positiveInfOptions, metadata = metadata
     ).apply("max").asInstanceOf[Float]
 
     assert(floatVal2 == Float.PositiveInfinity)
@@ -184,17 +240,16 @@ class UnivocityParserSuite extends SparkFunSuite {
   test("Double infinite values can be parsed") {
     val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "GMT")
     val doubleVal1 = parser.makeConverter(
-      "_1", DoubleType, nullable = true, options = negativeInfOptions
+      "_1", DoubleType, nullable = true, options = negativeInfOptions, metadata = metadata
     ).apply("max").asInstanceOf[Double]
 
     assert(doubleVal1 == Double.NegativeInfinity)
 
     val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "GMT")
     val doubleVal2 = parser.makeConverter(
-      "_1", DoubleType, nullable = true, options = positiveInfOptions
+      "_1", DoubleType, nullable = true, options = positiveInfOptions, metadata = metadata
     ).apply("max").asInstanceOf[Double]
 
     assert(doubleVal2 == Double.PositiveInfinity)
   }
-
 }
