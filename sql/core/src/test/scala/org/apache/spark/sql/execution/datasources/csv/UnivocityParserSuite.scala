@@ -165,8 +165,9 @@ class UnivocityParserSuite extends SparkFunSuite {
 
     val timestampsOptions =
       new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
+    val initTimestamp = "31/01/2015 00:00"
+    val expectedTime = timestampsOptions.timestampFormat.parse(initTimestamp).getTime
     val customTimestamp = "2015/01/31 00:00"
-    val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
     val customTimestampMetadata = metadataBuilder
       .putString("dateFormat", "yyyy/MM/dd hh:mm").build()
     val castedTimestamp =
@@ -176,9 +177,9 @@ class UnivocityParserSuite extends SparkFunSuite {
       ).apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
-    val customDate = "2015/01/31"
+    val initDate = "31/01/2015"
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
-    val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
+    val expectedDate = dateOptions.dateFormat.parse(initDate).getTime
     val customDateMetadata = metadataBuilder.putString("dateFormat", "yyyy/MM/dd").build()
     val castedDate =
       parser.makeConverter(
