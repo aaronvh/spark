@@ -23,8 +23,10 @@ import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.NonFatal
+
 import com.univocity.parsers.csv.CsvParser
 import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
